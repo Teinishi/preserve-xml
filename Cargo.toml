@@ -1,7 +1,10 @@
 [package]
 name = "preserve-xml"
 version = "0.1.0"
+authors = ["Teinishi"]
 edition = "2024"
+description = "Non-destructive XML mapping library built on top of `quick-xml`."
+license = "MIT"
 
 [dependencies]
 quick-xml = "0.39.2"
