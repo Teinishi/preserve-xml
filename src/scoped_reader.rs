@@ -1,14 +1,15 @@
-use super::{ParseContent, WithMetadata};
+use super::{AttrSlot, ParseContent, WithMetadata};
 
 use quick_xml::{Reader, events::Event};
 use std::io::BufRead;
 
-pub struct ScopedReader<'a, R> {
+#[derive(Debug)]
+pub struct ElementBuilder<'a, R> {
     reader: &'a mut Reader<R>,
     stack: Vec<Vec<u8>>,
 }
 
-impl<'a, R> ScopedReader<'a, R> {
+impl<'a, R> ElementBuilder<'a, R> {
     pub fn new(reader: &'a mut Reader<R>) -> Self {
         Self {
             reader,
@@ -61,20 +62,22 @@ impl<'a, R> ScopedReader<'a, R> {
         Ok(())
     }
 
-    pub fn parse_content<T, C: ParseContent<T>, F>(
+    pub(crate) fn parse_content<T, C: ParseContent<T>, F>(
         &mut self,
-        content: &mut C,
-        mut f: F,
-    ) -> quick_xml::Result<()>
+        mut read_event: F,
+    ) -> quick_xml::Result<C>
     where
-        F: FnMut(&mut ScopedReader<'a, R>, Event) -> quick_xml::Result<Option<WithMetadata<T>>>,
         R: BufRead,
+        F: FnMut(&mut ElementBuilder<'a, R>, Event) -> quick_xml::Result<Option<WithMetadata<T>>>,
     {
+        let mut content = C::new();
+
         // 子要素を読んでコールバックを呼び、マッチすれば push、しなければ push_raw
         let stack_len = self.stack.len();
 
         let mut buf1 = Vec::new();
         let mut buf2 = Vec::new();
+
         loop {
             let event = self.read(&mut buf2)?;
             match &event {
@@ -92,7 +95,7 @@ impl<'a, R> ScopedReader<'a, R> {
             let is_start = matches!(event, Event::Start(_));
 
             // コールバックを呼んでマッチしたらその前の生データと子要素を追加
-            if let Some(data) = f(self, event)? {
+            if let Some(data) = read_event(self, event)? {
                 content.push_raw(std::mem::take(&mut buf1));
                 content.push(data);
                 buf2.clear();
@@ -104,6 +107,41 @@ impl<'a, R> ScopedReader<'a, R> {
                 buf1.append(&mut buf2);
             }
         }
-        Ok(())
+
+        Ok(content)
+    }
+
+    pub fn build<S, T, C: ParseContent<T>, F1, F2>(
+        &mut self,
+        attributes: Vec<AttrSlot>,
+        read_event: F1,
+        finalize: F2,
+    ) -> quick_xml::Result<WithMetadata<S>>
+    where
+        R: BufRead,
+        F1: FnMut(&mut ElementBuilder<'a, R>, Event) -> quick_xml::Result<Option<WithMetadata<T>>>,
+        F2: FnOnce(C) -> S,
+    {
+        // todo: 最後まで読んだことを保証する
+        let content = self.parse_content(read_event)?;
+        let element = finalize(content);
+        Ok(WithMetadata::new(attributes, element))
+    }
+}
+
+// ElementBuilder からしか生成できない構造体で、WithMetadata の生成を制限する
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct EmptyElementBuilder;
+
+impl EmptyElementBuilder {
+    pub fn build<T>(&self, attributes: Vec<AttrSlot>, element: T) -> WithMetadata<T> {
+        WithMetadata::new(attributes, element)
+    }
+}
+
+impl<'a, R> From<&mut ElementBuilder<'a, R>> for EmptyElementBuilder {
+    fn from(_value: &mut ElementBuilder<'a, R>) -> Self {
+        Self
     }
 }

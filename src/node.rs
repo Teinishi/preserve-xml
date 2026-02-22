@@ -21,15 +21,20 @@ impl Debug for AttrSlot {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct XmlMeta {
-    pub attributes: Vec<AttrSlot>,
+#[derive(Clone, Debug)]
+#[non_exhaustive] // 外部から WithMetadata { .. } で生成できないように
+pub struct WithMetadata<T> {
+    pub meta: Vec<AttrSlot>,
+    pub element: T,
 }
 
-#[derive(Clone, Debug)]
-pub struct WithMetadata<T> {
-    pub meta: XmlMeta,
-    pub inner: T,
+impl<T> WithMetadata<T> {
+    pub(crate) fn new(attributes: Vec<AttrSlot>, element: T) -> Self {
+        Self {
+            meta: attributes,
+            element,
+        }
+    }
 }
 
 #[derive(Clone)]

@@ -1,10 +1,12 @@
 use super::{Node, WithMetadata};
 
 pub trait ParseContent<T> {
+    fn new() -> Self;
     fn push(&mut self, value: WithMetadata<T>);
     fn push_raw(&mut self, value: Vec<u8>);
 }
 
+// 任意の数の T と RawData を持てる
 #[derive(Clone, Debug)]
 pub struct Content<T> {
     nodes: Vec<Node<T>>,
@@ -19,7 +21,7 @@ impl<T> Default for Content<T> {
 impl<T> Content<T> {
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.nodes.iter().filter_map(|node| match node {
-            Node::Typed(wm) => Some(&wm.inner),
+            Node::Typed(wm) => Some(&wm.element),
             Node::Raw(_) => None,
         })
     }
@@ -30,6 +32,10 @@ impl<T> Content<T> {
 }
 
 impl<T> ParseContent<T> for Content<T> {
+    fn new() -> Self {
+        Self::default()
+    }
+
     fn push(&mut self, value: WithMetadata<T>) {
         self.nodes.push(Node::Typed(value));
     }
@@ -38,3 +44,7 @@ impl<T> ParseContent<T> for Content<T> {
         self.nodes.push(Node::Raw(value));
     }
 }
+
+// todo: RawData のみを持つ
+// todo: 何も持たない
+// todo: 1個のみ T を持つ
