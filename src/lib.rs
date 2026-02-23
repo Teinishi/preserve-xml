@@ -1,10 +1,14 @@
+pub mod attr_scanner;
 pub mod content;
 pub mod node;
 pub mod scoped_reader;
+pub mod utils;
 
+pub use attr_scanner::{AttrSlot, Attributes};
 pub use content::{Content, ParseContent, SerializeContent};
 pub use node::*;
 pub use scoped_reader::{ElementBuilder, EmptyElementBuilder};
+pub use utils::{escape_xml, unescape_xml};
 
 use quick_xml::Reader;
 pub use quick_xml::events::{BytesStart, Event};
@@ -22,13 +26,13 @@ pub trait ParseXml: Sized {
 }
 
 pub trait WriteXml {
-    fn write_xml<W: Write>(&self, attributes: &[AttrSlot], writer: &mut W) -> std::io::Result<()>;
+    fn write_xml<W: Write>(&self, attributes: &Attributes, writer: &mut W) -> std::io::Result<()>;
 }
 
 impl WriteXml for () {
     fn write_xml<W: Write>(
         &self,
-        _attributes: &[AttrSlot],
+        _attributes: &Attributes,
         _writer: &mut W,
     ) -> std::io::Result<()> {
         Ok(())
@@ -66,6 +70,7 @@ pub fn parse_str<T: ParseXml>(s: &str) -> quick_xml::Result<Content<T>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[derive(Debug)]
     struct Root {
         value: String,
@@ -88,19 +93,14 @@ mod tests {
             }
 
             // 属性の処理
-            let mut attributes = Vec::new();
-            let mut value = String::new();
-            for attr in start.attributes().flatten() {
-                let key = attr.key.as_ref().to_vec();
-                if attr.key.as_ref() == b"value" {
-                    // 定義済み属性
-                    attributes.push(AttrSlot::Defined(key));
-                    value = String::from_utf8_lossy(&attr.value).into_owned();
-                } else {
-                    // 未定義属性
-                    attributes.push(AttrSlot::Raw(key, attr.value.as_ref().to_vec()));
+            let mut value = Default::default();
+            let attributes = Attributes::new(start.attributes_raw(), |k, v| match k {
+                b"value" => {
+                    value = v;
+                    true
                 }
-            }
+                _ => false,
+            });
 
             // 子要素のパース
             let el = builder.build(
@@ -136,19 +136,14 @@ mod tests {
             }
 
             // 1. 属性の処理
-            let mut attributes = Vec::new();
-            let mut value = String::new();
-            for attr in start.attributes().flatten() {
-                let key = attr.key.as_ref().to_vec();
-                if attr.key.as_ref() == b"value" {
-                    // 定義済み属性
-                    attributes.push(AttrSlot::Defined(key));
-                    value = String::from_utf8_lossy(&attr.value).into_owned();
-                } else {
-                    // 未定義属性
-                    attributes.push(AttrSlot::Raw(key, attr.value.as_ref().to_vec()));
+            let mut value = Default::default();
+            let attributes = Attributes::new(start.attributes_raw(), |k, v| match k {
+                b"value" => {
+                    value = v;
+                    true
                 }
-            }
+                _ => false,
+            });
 
             let el = builder.build(
                 attributes,
@@ -165,30 +160,15 @@ mod tests {
     impl WriteXml for Root {
         fn write_xml<W: Write>(
             &self,
-            attributes: &[AttrSlot],
+            attributes: &Attributes,
             writer: &mut W,
         ) -> std::io::Result<()> {
             write!(writer, "<root")?;
 
-            for attr in attributes {
-                match attr {
-                    AttrSlot::Defined(name) => match &name[..] {
-                        b"value" => {
-                            write!(writer, " value=\"{}\"", self.value)?;
-                        }
-                        _ => {
-                            panic!("Unknown attribute");
-                        }
-                    },
-                    AttrSlot::Raw(key, value) => {
-                        writer.write_all(b" ")?;
-                        writer.write_all(key)?;
-                        writer.write_all(b"=\"")?;
-                        writer.write_all(value)?;
-                        writer.write_all(b"\"")?;
-                    }
-                }
-            }
+            attributes.write(writer, |k| match k {
+                b"value" => Some((&self.value).into()),
+                _ => None,
+            })?;
 
             if self.content.is_empty() {
                 writer.write_all(b"/>")?;
@@ -212,22 +192,14 @@ mod tests {
             }
 
             // 属性の処理
-            let mut attributes = Vec::new();
-            let mut value = 0;
-            for attr in start.attributes().flatten() {
-                let key = attr.key.as_ref().to_vec();
-                if attr.key.as_ref() == b"value" {
-                    // 定義済み属性
-                    attributes.push(AttrSlot::Defined(key));
-                    value = std::str::from_utf8(&attr.value)
-                        .ok()
-                        .and_then(|s| s.parse().ok())
-                        .unwrap();
-                } else {
-                    // 未定義属性
-                    attributes.push(AttrSlot::Raw(key, attr.value.as_ref().to_vec()));
+            let mut value = Default::default();
+            let attributes = Attributes::new(start.attributes_raw(), |k, v| match k {
+                b"value" => {
+                    value = v.parse().unwrap();
+                    true
                 }
-            }
+                _ => false,
+            });
 
             // 子要素のパース
             let el = builder.build(
@@ -247,23 +219,15 @@ mod tests {
                 return Ok(None);
             }
 
-            // 1. 属性の処理
-            let mut attributes = Vec::new();
-            let mut value = 0;
-            for attr in start.attributes().flatten() {
-                let key = attr.key.as_ref().to_vec();
-                if attr.key.as_ref() == b"value" {
-                    // 定義済み属性
-                    attributes.push(AttrSlot::Defined(key));
-                    value = std::str::from_utf8(&attr.value)
-                        .ok()
-                        .and_then(|s| s.parse().ok())
-                        .unwrap();
-                } else {
-                    // 未定義属性
-                    attributes.push(AttrSlot::Raw(key, attr.value.as_ref().to_vec()));
+            // 属性の処理
+            let mut value = Default::default();
+            let attributes = Attributes::new(start.attributes_raw(), |k, v| match k {
+                b"value" => {
+                    value = v.parse().unwrap();
+                    true
                 }
-            }
+                _ => false,
+            });
 
             Ok(Some(builder.build(
                 attributes,
@@ -278,30 +242,15 @@ mod tests {
     impl WriteXml for Leaf {
         fn write_xml<W: Write>(
             &self,
-            attributes: &[AttrSlot],
+            attributes: &Attributes,
             writer: &mut W,
         ) -> std::io::Result<()> {
             write!(writer, "<leaf")?;
 
-            for attr in attributes {
-                match attr {
-                    AttrSlot::Defined(name) => match &name[..] {
-                        b"value" => {
-                            write!(writer, " value=\"{}\"", self.value)?; // todo: エスケープ
-                        }
-                        _ => {
-                            panic!("Unknown attribute");
-                        }
-                    },
-                    AttrSlot::Raw(key, value) => {
-                        writer.write_all(b" ")?;
-                        writer.write_all(key)?;
-                        writer.write_all(b"=\"")?;
-                        writer.write_all(value)?;
-                        writer.write_all(b"\"")?;
-                    }
-                }
-            }
+            attributes.write(writer, |k| match k {
+                b"value" => Some(format!("{}", self.value).into()),
+                _ => None,
+            })?;
 
             if self.content.is_empty() {
                 writer.write_all(b"/>")?;
@@ -333,7 +282,8 @@ mod tests {
 <root value=\"multiple
     lines\" 01=\"bar\">
     <leaf value=\"123\" />
-    <leaf value=\"456\">hoge</leaf>
+    <leaf
+        value = \"456\">hoge</leaf>
     <uninterested value=\"789\">
         <leaf />
     </uninterested>

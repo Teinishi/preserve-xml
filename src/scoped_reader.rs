@@ -1,4 +1,4 @@
-use super::{AttrSlot, ParseContent, WithMetadata};
+use super::{Attributes, ParseContent, WithMetadata};
 
 use quick_xml::{Reader, events::Event};
 use std::io::BufRead;
@@ -113,7 +113,7 @@ impl<'a, R> ElementBuilder<'a, R> {
 
     pub fn build<S, T, C: ParseContent<T>, F1, F2>(
         &mut self,
-        attributes: Vec<AttrSlot>,
+        attributes: Attributes,
         read_event: F1,
         finalize: F2,
     ) -> quick_xml::Result<WithMetadata<S>>
@@ -122,7 +122,6 @@ impl<'a, R> ElementBuilder<'a, R> {
         F1: FnMut(&mut ElementBuilder<'a, R>, Event) -> quick_xml::Result<Option<WithMetadata<T>>>,
         F2: FnOnce(C) -> S,
     {
-        // todo: 最後まで読んだことを保証する
         let content = self.parse_content(read_event)?;
         let element = finalize(content);
         Ok(WithMetadata::new(attributes, element))
@@ -135,7 +134,7 @@ impl<'a, R> ElementBuilder<'a, R> {
 pub struct EmptyElementBuilder;
 
 impl EmptyElementBuilder {
-    pub fn build<T>(&self, attributes: Vec<AttrSlot>, element: T) -> WithMetadata<T> {
+    pub fn build<T>(&self, attributes: Attributes, element: T) -> WithMetadata<T> {
         WithMetadata::new(attributes, element)
     }
 }
