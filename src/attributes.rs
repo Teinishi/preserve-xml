@@ -1,6 +1,4 @@
-use crate::unescape_xml;
-
-use super::utils::{debug_utf8, escape_xml};
+use super::{escape_xml, unescape_xml, utils::debug_utf8};
 
 use std::{borrow::Cow, fmt::Debug, io::Write};
 

@@ -1,10 +1,10 @@
-pub mod attr_scanner;
+pub mod attributes;
 pub mod content;
 pub mod node;
 pub mod scoped_reader;
 pub mod utils;
 
-pub use attr_scanner::{AttrSlot, Attributes};
+pub use attributes::{AttrSlot, Attributes};
 pub use content::{Content, ParseContent, SerializeContent};
 pub use node::*;
 pub use scoped_reader::{ElementBuilder, EmptyElementBuilder};
