@@ -24,14 +24,14 @@ impl Debug for AttrSlot {
 #[derive(Clone, Debug)]
 #[non_exhaustive] // 外部から WithMetadata { .. } で生成できないように
 pub struct WithMetadata<T> {
-    pub meta: Vec<AttrSlot>,
+    pub attributes: Vec<AttrSlot>,
     pub element: T,
 }
 
 impl<T> WithMetadata<T> {
     pub(crate) fn new(attributes: Vec<AttrSlot>, element: T) -> Self {
         Self {
-            meta: attributes,
+            attributes,
             element,
         }
     }
