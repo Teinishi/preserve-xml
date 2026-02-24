@@ -10,12 +10,17 @@ pub struct Attributes {
 
 impl Debug for Attributes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Attributes {{ slots: {:?}, trailing_space: {:?} }}",
-            self.slots,
-            debug_utf8(&self.trailing_space)
-        )
+        #[expect(dead_code)]
+        #[derive(Debug)]
+        struct Attributes<'a> {
+            slots: &'a Vec<AttrSlot>,
+            trailing_space: &'a str,
+        }
+        let tmp = Attributes {
+            slots: &self.slots,
+            trailing_space: debug_utf8(&self.trailing_space),
+        };
+        tmp.fmt(f)
     }
 }
 
@@ -58,25 +63,32 @@ pub enum AttrSlot {
     Defined {
         prefix: Vec<u8>,
         key: Vec<u8>,
-        quote: u8,
+        quote: char,
     },
     Raw(Vec<u8>),
 }
 
 impl Debug for AttrSlot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Defined { prefix, key, quote } => write!(
-                f,
-                "Defined {{ prefix: {:?}, key: {:?}, quote: {:?}}}",
-                debug_utf8(prefix),
-                debug_utf8(key),
-                quote,
-            ),
-            Self::Raw(data) => {
-                write!(f, "Raw({:?})", debug_utf8(data))
-            }
+        #[expect(dead_code)]
+        #[derive(Debug)]
+        enum AttrSlot<'a> {
+            Defined {
+                prefix: &'a str,
+                key: &'a str,
+                quote: char,
+            },
+            Raw(&'a str),
         }
+        let tmp = match self {
+            Self::Defined { prefix, key, quote } => AttrSlot::Defined {
+                prefix: debug_utf8(prefix),
+                key: debug_utf8(key),
+                quote: *quote,
+            },
+            Self::Raw(data) => AttrSlot::Raw(debug_utf8(data)),
+        };
+        tmp.fmt(f)
     }
 }
 
@@ -149,11 +161,11 @@ impl<'a> AttrScanner<'a> {
             }
             self.consume_whitespace();
 
-            let quote = self.consume().unwrap_or(b'"');
+            let quote = self.consume().unwrap_or(b'"') as char;
 
             // 属性値のパース
             let value_start = self.pos;
-            while self.consume().is_some_and(|b| b != quote) {}
+            while self.consume().is_some_and(|b| b as char != quote) {}
             let value_end_with_quote = self.pos;
 
             // コールバックを呼ぶ
